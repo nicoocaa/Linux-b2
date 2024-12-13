@@ -1,0 +1,25 @@
+version: '3.1'
+
+services:
+  app:
+    build: ./app
+    ports:
+      - "8080:8080"
+    environment:
+      - DB_HOST=db
+      - PORT=8080
+
+  db:
+    image: mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+    volumes:
+      - ./seed.sql:/docker-entrypoint-initdb.d/seed.sql
+
+  phpmyadmin:
+    image: phpmyadmin
+    environment:
+      - PMA_HOST=db
+      - MYSQL_ROOT_PASSWORD=root
+    ports:
+      - "13337:80"
