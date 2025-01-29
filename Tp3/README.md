@@ -513,76 +513,197 @@ awk '$2 != "root" {print}'
 
 ## 2. Conf SSH
 
-![SSH](./img/ssh.jpg)
-
-🌞 **Chiffrement fort côté serveur**
-
-- trouver une ressource de confiance (je veux le lien en compte-rendu)
-- configurer le serveur SSH pour qu'il utilise des paramètres forts en terme de chiffrement (je veux le fichier de conf dans le compte-rendu)
-  - conf dans le fichier de conf
-  - regénérer des clés pour le serveur ?
-  - regénérer les paramètres Diffie-Hellman ? (se renseigner sur Diffie-Hellman ?)
-
-🌞 **Clés de chiffrement fortes pour le client**
-
-- trouver une ressource de confiance (je veux le lien en compte-rendu)
-- générez-vous une paire de clés qui utilise un chiffrement fort et une passphrase
-- ne soyez pas non plus absurdes dans le choix du chiffrement quand je dis "fort" (genre pas de RSA avec une clé de taile 98789080932083209 bytes)
-- vous n'utiliserez PAS l'algorithme RSA, trouvez autre chose
-
-🌞 **Connectez-vous en SSH à votre VM avec cette paire de clés**
-
-- prouvez en ajoutant `-vvvv` sur la commande `ssh` de connexion que vous utilisez bien cette clé là
-
 ## 4. DoT
-
-Ca commence à faire quelques années maintenant que plusieurs acteurs poussent pour qu'on fasse du DNS chiffré, et qu'on arrête d'envoyer des requêtes DNS en clair dans tous les sens.
-
-Le Dot est une techno qui va dans ce sens : DoT pour DNS over TLS. On fait nos requêtes DNS dans des tunnels chiffrés avec le protocole TLS.
 
 🌞 **Configurer la machine pour qu'elle fasse du DoT**
 
-- installez `systemd-resolved` sur la machine pour ça
-- activez aussi DNSSEC tant qu'on y est
-- [référez-vous à cette doc qui est cool par exemple](https://wiki.archlinux.org/title/systemd-resolved)
-- utilisez le serveur public de CloudFlare : 1.1.1.1 (il supporte le DoT)
+```bash
+[nico@localhost ~]$ sudo dnf install systemd-resolved
+[sudo] password for nico:
+AlmaLinux 9 - AppStream                     6.6 kB/s | 4.2 kB     00:00
+AlmaLinux 9 - AppStream                     1.4 MB/s |  11 MB     00:08
+AlmaLinux 9 - BaseOS                        5.1 kB/s | 3.8 kB     00:00
+AlmaLinux 9 - BaseOS                        1.4 MB/s | 9.1 MB     00:06
+AlmaLinux 9 - Extras                        2.9 kB/s | 3.3 kB     00:01
+AlmaLinux 9 - Extras                         10 kB/s |  13 kB     00:01
+Package systemd-resolved-252-46.el9_5.2.alma.1.x86_64 is already installed.
+Dependencies resolved.
+Nothing to do.
+Complete!
+[nico@localhost ~]$ sudo systemctl start systemd-resolved
+[nico@localhost ~]$ sudo nano /etc/systemd/resolved.conf
+sudo: nano: command not found
+[nico@localhost ~]$ sudo vi /etc/systemd/resolved.conf
+[nico@localhost ~]$ sudo cat /etc/systemd/resolved.conf
+#  This file is part of systemd.
+#
+#  systemd is free software; you can redistribute it and/or modify it under the
+#  terms of the GNU Lesser General Public License as published by the Free
+#  Software Foundation; either version 2.1 of the License, or (at your option)
+#  any later version.
+#
+# Entries in this file show the compile time defaults. Local configuration
+# should be created by either modifying this file, or by creating "drop-ins" in
+# the resolved.conf.d/ subdirectory. The latter is generally recommended.
+# Defaults can be restored by simply deleting this file and all drop-ins.
+#
+# Use 'systemd-analyze cat-config systemd/resolved.conf' to display the full config.
+#
+# See resolved.conf(5) for details.
 
-> Donc normalement : install du paquet, modif du fichier `/etc/systemd/resolved.conf` pour activer le DoT, activer DNSSEC et utiliser `1.1.1.1`, puis une commande pour modifier le contenu de `/etc/resolv.conf`, et enfin, redémarrer le service `systemd-resoved`.
+[Resolve]
+DNS=1.1.1.1
+DNSOverTLS=yes
+DNSSEC=yes
+
+# Some examples of DNS servers which may be used for DNS= and FallbackDNS=:
+# Cloudflare: 1.1.1.1#cloudflare-dns.com 1.0.0.1#cloudflare-dns.com 2606:4700:4700::1111#cloudflare-dns.com 2606:4700:4700::1001#cloudflare-dns.com
+# Google:     8.8.8.8#dns.google 8.8.4.4#dns.google 2001:4860:4860::8888#dns.google 2001:4860:4860::8844#dns.google
+# Quad9:      9.9.9.9#dns.quad9.net 149.112.112.112#dns.quad9.net 2620:fe::fe#dns.quad9.net 2620:fe::9#dns.quad9.net
+#DNS=
+#FallbackDNS=
+#Domains=
+#DNSSEC=no
+#DNSOverTLS=no
+#MulticastDNS=no
+#LLMNR=resolve
+#Cache=yes
+#CacheFromLocalhost=no
+#DNSStubListener=yes
+#DNSStubListenerExtra=
+#ReadEtcHosts=yes
+#ResolveUnicastSingleLabel=no
+[nico@localhost ~]$ sudo ln -sf /run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
+[nico@localhost ~]$
+```
 
 🌞 **Prouvez que les requêtes DNS effectuées par la machine...**
 
-- ont une réponse qui provient du serveur que vous avez conf (normalement c'est `127.0.0.1` avec `systemd-networkd` qui tourne)
-  - quand on fait un `dig ynov.com` on voit en bas quel serveur a répondu
-- mais qu'en réalité, la requête a été forward vers 1.1.1.1 avec du TLS
-  - je veux une capture Wireshark à l'appui !
+```bash
+[nico@localhost ~]$ dig ynov.com
+
+; <<>> DiG 9.16.23-RH <<>> ynov.com
+;; global options: +cmd
+;; Got answer:
+;; ->>HEADER<<- opcode: QUERY, status: NOERROR, id: 43593
+;; flags: qr rd ra; QUERY: 1, ANSWER: 3, AUTHORITY: 0, ADDITIONAL: 1
+
+;; OPT PSEUDOSECTION:
+; EDNS: version: 0, flags:; udp: 65494
+;; QUESTION SECTION:
+;ynov.com.                      IN      A
+
+;; ANSWER SECTION:
+ynov.com.               300     IN      A       104.26.10.233
+ynov.com.               300     IN      A       104.26.11.233
+ynov.com.               300     IN      A       172.67.74.226
+
+;; Query time: 220 msec
+;; SERVER: 127.0.0.53#53(127.0.0.53)
+;; WHEN: Wed Jan 29 10:03:10 CET 2025
+;; MSG SIZE  rcvd: 85
+
+[nico@localhost ~]$ resolvectl query ynov.com
+ynov.com: 104.26.10.233                        -- link: enp0s8
+          104.26.11.233                        -- link: enp0s8
+          172.67.74.226                        -- link: enp0s8
+          2606:4700:20::681a:ae9               -- link: enp0s8
+          2606:4700:20::681a:be9               -- link: enp0s8
+          2606:4700:20::ac43:4ae2              -- link: enp0s8
+
+-- Information acquired via protocol DNS in 104.4ms.
+-- Data is authenticated: no; Data was acquired via local or encrypted transport: yes
+-- Data from: cache network
+[nico@localhost ~]$
+
+```
 
 ## 5. AIDE
 
-Un truc demandé au point 1.3.1 du guide CIS c'est d'installer AIDE.
-
-AIDE est un IDS ou *Intrusion Detection System*. Les IDS c'est un type de programme dont les fonctions peuvent être multiples.
-
-Dans notre cas, AIDE, il surveille que certains fichiers du disque n'ont pas été modifiés. Des fichiers comme `/etc/shadow` par exemple.
-
 🌞 **Installer et configurer AIDE**
 
-- et bah incroyable mais [une très bonne ressource ici](https://www.it-connect.fr/aide-utilisation-et-configuration-dune-solution-de-controle-dintegrite-sous-linux/)
-- configurez AIDE pour qu'il surveille (fichier de conf en compte-rendu)
-  - le fichier de conf du serveur SSH
-  - le fichier de conf du client chrony (le service qui gère le temps)
-  - le fichier de conf de `systemd-networkd`
+```bash
+[nico@localhost ~]$ sudo yum install aide
+Last metadata expiration check: 0:04:15 ago on Wed Jan 29 10:01:45 2025.
+Dependencies resolved.
+============================================================================
+ Package      Architecture   Version                Repository         Size
+============================================================================
+Installing:
+ aide         x86_64         0.16-102.el9           appstream         146 k
 
-🌞 **Scénario de modification**
+Transaction Summary
+============================================================================
+Install  1 Package
 
-- introduisez une modification dans le fichier de conf du serveur SSH
-- montrez que AIDE peut la détecter
+Total download size: 146 k
+Installed size: 353 k
+Is this ok [y/N]: y
+Downloading Packages:
+[MIRROR] aide-0.16-102.el9.x86_64.rpm: Curl error (6): Couldn't resolve host name for http://mirror.ibcp.fr/pub/almalinux/9.5/AppStream/x86_64/os/Packages/aide-0.16-102.el9.x86_64.rpm [Could not resolve host: mirror.ibcp.fr]
+aide-0.16-102.el9.x86_64.rpm                211 kB/s | 146 kB     00:00
+----------------------------------------------------------------------------
+Total                                       109 kB/s | 146 kB     00:01
+Running transaction check
+Transaction check succeeded.
+Running transaction test
+Transaction test succeeded.
+Running transaction
+  Preparing        :                                                    1/1
+  Installing       : aide-0.16-102.el9.x86_64                           1/1
+  Running scriptlet: aide-0.16-102.el9.x86_64                           1/1
+  Verifying        : aide-0.16-102.el9.x86_64                           1/1
 
-🌞 **Timer et service systemd**
+Installed:
+  aide-0.16-102.el9.x86_64
 
-- créez un service systemd qui exécute un check AIDE
-  - il faut créer un fichier `.service` dans le dossier `/etc/systemd/system/`
-  - contenu du fichier à montrer dans le compte rendu
-- créez un timer systemd qui exécute un check AIDE toutes les 10 minutes
-  - il faut créer un fichier `.timer` dans le dossier `/etc/systemd/system/`
-  - il doit porter le même nom que le service, genre `aide.service` et `aide.timer`
-  - c'est complètement irréaliste 10 minutes, mais ça vous permettra de faire des tests (vous pouvez même raccourcir encore)
+Complete!
+[nico@localhost ~]$ sudo aide --init
+Start timestamp: 2025-01-29 10:06:14 +0100 (AIDE 0.16)
+AIDE initialized database at /var/lib/aide/aide.db.new.gz
+
+Number of entries:      33557
+
+---------------------------------------------------
+The attributes of the (uncompressed) database(s):
+---------------------------------------------------
+
+/var/lib/aide/aide.db.new.gz
+  MD5      : 13hiYPEY7KPNR/A86GeAgQ==
+  SHA1     : Vw43iLqcL0xaZ4zxkTsG59b4aEM=
+  RMD160   : vtT75UGZWDzV3zbt6PpzOcN8qpY=
+  TIGER    : m9baJauVhrlkH4IqUWY+bk8v/O7OuanG
+  SHA256   : oY3rIgWxL0q72MABNqq3OyRY6ECKj0pM
+             gsdnsJNRnaI=
+  SHA512   : FFJ7q7hMk9F5Uqhu5mnXc1L5RcwEFi0R
+             ofk74x02qTOQnX2PxLR3HO1JTxhbvmLM
+             eBoMOvxBiEg8rcocPdpLWA==
+
+
+End timestamp: 2025-01-29 10:06:59 +0100 (run time: 0m 45s)
+[nico@localhost ~]$ sudo mv /var/lib/aide/aide.db.new.gz /var/lib/aide/aide.db.gz
+[nico@localhost ~]$ sudo aide --check
+Start timestamp: 2025-01-29 10:07:18 +0100 (AIDE 0.16)
+AIDE found NO differences between database and filesystem. Looks okay!!
+
+Number of entries:      33557
+
+---------------------------------------------------
+The attributes of the (uncompressed) database(s):
+---------------------------------------------------
+
+/var/lib/aide/aide.db.gz
+  MD5      : 13hiYPEY7KPNR/A86GeAgQ==
+  SHA1     : Vw43iLqcL0xaZ4zxkTsG59b4aEM=
+  RMD160   : vtT75UGZWDzV3zbt6PpzOcN8qpY=
+  TIGER    : m9baJauVhrlkH4IqUWY+bk8v/O7OuanG
+  SHA256   : oY3rIgWxL0q72MABNqq3OyRY6ECKj0pM
+             gsdnsJNRnaI=
+  SHA512   : FFJ7q7hMk9F5Uqhu5mnXc1L5RcwEFi0R
+             ofk74x02qTOQnX2PxLR3HO1JTxhbvmLM
+             eBoMOvxBiEg8rcocPdpLWA==
+
+
+End timestamp: 2025-01-29 10:07:29 +0100 (run time: 0m 11s)
+[nico@localhost ~]$
+```
